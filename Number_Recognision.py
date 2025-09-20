@@ -1,6 +1,10 @@
+from PIL import Image
+import matplotlib.pyplot as plt
 import torch
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
+import numpy as np
+
 
 import torch.nn as nn
 import torch.optim as optim
@@ -12,8 +16,8 @@ class DigitRecognitionNet(nn.Module):
         super(DigitRecognitionNet, self).__init__()
         self.conv1 = nn.Conv2d(1, 32, 3, 1)
         self.conv2 = nn.Conv2d(32, 64, 3, 1)
-        self.dropout1 = nn.Dropout(0.25)
-        self.dropout2 = nn.Dropout(0.5)
+        self.dropout1 = nn.Dropout(0.3)
+        self.dropout2 = nn.Dropout(0.3)
         self.fc1 = nn.Linear(9216, 128)
         self.fc2 = nn.Linear(128, 10)
 
@@ -61,15 +65,70 @@ def test(model, device, test_loader):
     accuracy = 100. * correct / len(test_loader.dataset)
     print(f'Тестовая потеря: {test_loss:.4f}, Точность: {correct}/{len(test_loader.dataset)} ({accuracy:.0f}%)')
 
-# Основная функция
-def main():
+# Функция для тестирования собственных изображений
+def predict_custom_image(model, device, image_path):
+    # Загрузка изображения
+    image = Image.open(image_path)
+    
+    # Преобразование в оттенки серого и изменение размера
+    image = image.convert('L')  # Преобразовать в оттенки серого
+    image = image.resize((28, 28))  # Изменить размер до 28x28
+    
+    # Конвертировать в numpy массив
+    image_array = np.array(image)
+    
+    # ВАЖНО: Инвертировать цвета (MNIST имеет белые цифры на черном фоне)
+    image_array = 255 - image_array
+    
+    # Преобразовать обратно в PIL Image
+    image_inverted = Image.fromarray(image_array)
+    
+    # Применить трансформации как в MNIST
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.1307,), (0.3081,))
+    ])
+    
+    image_tensor = transform(image_inverted).unsqueeze(0).to(device)  # Добавить batch dimension
+    
+    # Предсказание
+    model.eval()
+    with torch.no_grad():
+        output = model(image_tensor)
+        prediction = output.argmax(dim=1, keepdim=True).item()
+        confidence = F.softmax(output, dim=1).max().item()
+    
+    # Показать изображение и результат
+    plt.figure(figsize=(8, 4))
+    
+    plt.subplot(1, 2, 1)
+    plt.imshow(image, cmap='gray')
+    plt.title('Исходное изображение')
+    plt.axis('off')
+    
+    plt.subplot(1, 2, 2)
+    processed_image = transforms.Resize((28, 28))(transforms.Grayscale()(image))
+    plt.imshow(processed_image, cmap='gray')
+    plt.title(f'Предсказание: {prediction}\nУверенность: {confidence:.2%}')
+    plt.axis('off')
+    
+    plt.tight_layout()
+    plt.show()
+    
+    return prediction, confidence
+
+# Функция для загрузки сохраненной модели
+def load_model(model_path, device):
+    model = DigitRecognitionNet().to(device)
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    return model
+
+def run_train_and_test(device):
     # Параметры
     batch_size = 64
     epochs = 5
     lr = 0.01
     
-    # Проверка доступности GPU
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     # Преобразования данных
     transform = transforms.Compose([
@@ -96,6 +155,35 @@ def main():
     # Сохранение модели
     torch.save(model.state_dict(), "digit_recognition_model.pth")
     print("Модель сохранена как digit_recognition_model.pth")
+    
+# Основная функция
+def main():
+    # Проверка доступности GPU
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    while True:
+        try:
+            User_Input = int(input("Выберите режим:\n1. Обучение и тестирование модели\n2. Тестирование собственного изображения\n0. Выход\nВведите 1, 2 или 0: "))
+        except ValueError:
+            print("Введите корректное число!")
+            continue
+            
+        if User_Input == 1:
+            run_train_and_test(device)
+        elif User_Input == 2:
+            try:
+                image_path = input("Введите путь к изображению: ")
+                model = load_model("digit_recognition_model.pth", device)
+                predict_custom_image(model, device, image_path)
+            except FileNotFoundError:
+                print("Файл модели или изображения не найден!")
+            except Exception as e:
+                print(f"Ошибка: {e}")
+        elif User_Input == 0:
+            print("Выход из программы")
+            break
+        else:
+            print("Введите 1, 2 или 0!")
+            
 if __name__ == '__main__':
     main()
