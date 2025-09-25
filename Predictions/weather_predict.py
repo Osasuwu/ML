@@ -326,7 +326,7 @@ def main():
             }
         }
         
-        with open('weather_predictions.json', 'w') as f:
+        with open('Predictions/saves/weather_predictions.json', 'w') as f:
             json.dump(results, f, indent=2)
         
         print(f"\nPrediction completed successfully!")
