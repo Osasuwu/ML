@@ -168,7 +168,7 @@ class WeatherPredictor:
             if epoch % 10 == 0:
                 print(f'Epoch [{epoch+1}/{epochs}], Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}')
             
-            if patience_counter >= 20:
+            if patience_counter >= 30:
                 print(f'Early stopping at epoch {epoch+1}')
                 break
         
@@ -354,7 +354,7 @@ def main():
     # Train model
     print(f"\nTraining model on {predictor.device}...")
     train_losses, val_losses = predictor.train_model(
-        train_loader, val_loader, val_data, epochs=100
+        train_loader, val_loader, val_data, epochs=365
     )
     
     # Evaluate model

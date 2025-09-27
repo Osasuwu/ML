@@ -1,0 +1,56 @@
+{
+  "model_name": "weather_step_changes_seq30_h64_l2_lr0.001_drop0.2",
+  "model_data_type": "step_changes",
+  "prediction_data_type": "realistic",
+  "prediction_date": "2025-09-27T12:38:04.142307",
+  "model_parameters": {
+    "sequence_length": 30,
+    "hidden_size": 64,
+    "num_layers": 2,
+    "dropout": 0.2
+  },
+  "predictions": {
+    "2025-09-28 12:37:56.821867": {
+      "temperature": 10.697078603517959,
+      "lower_bound": 8.915784478129387,
+      "upper_bound": 12.47837272890653,
+      "uncertainty": 0.9088235333615164
+    },
+    "2025-09-29 12:37:56.821867": {
+      "temperature": 11.593573840203511,
+      "lower_bound": 9.400339398625327,
+      "upper_bound": 13.786808281781695,
+      "uncertainty": 1.1189971640705023
+    },
+    "2025-09-30 12:37:56.821867": {
+      "temperature": 11.792708671741298,
+      "lower_bound": 9.943821826349353,
+      "upper_bound": 13.641595517133243,
+      "uncertainty": 0.9433096149958904
+    },
+    "2025-10-01 12:37:56.821867": {
+      "temperature": 12.428579287572388,
+      "lower_bound": 10.560417963690274,
+      "upper_bound": 14.296740611454503,
+      "uncertainty": 0.953143532592916
+    },
+    "2025-10-02 12:37:56.821867": {
+      "temperature": 12.793225621899882,
+      "lower_bound": 11.34747612443482,
+      "upper_bound": 14.238975119364945,
+      "uncertainty": 0.7376272946250314
+    },
+    "2025-10-03 12:37:56.821867": {
+      "temperature": 13.357330504095788,
+      "lower_bound": 11.378207585169667,
+      "upper_bound": 15.33645342302191,
+      "uncertainty": 1.009756591288837
+    },
+    "2025-10-04 12:37:56.821867": {
+      "temperature": 13.628302114134991,
+      "lower_bound": 11.851310132173781,
+      "upper_bound": 15.4052940960962,
+      "uncertainty": 0.9066285622251073
+    }
+  }
+}
