@@ -12,6 +12,7 @@ import json
 from datetime import datetime, timedelta
 import pickle
 import os
+from weather_data_generator import WeatherDataGenerator
 
 class WeatherLSTM(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers, output_size, dropout=0.2):
@@ -37,72 +38,24 @@ class WeatherLSTM(nn.Module):
         out = self.fc(out)
         return out
 
-class WeatherDataGenerator:
-    """Generate synthetic weather data for training"""
-    
-    def __init__(self, days=365*3, start_date="2020-01-01"):
-        self.days = days
-        self.start_date = pd.to_datetime(start_date)
-        
-    def generate_synthetic_data(self):
-        """Generate realistic synthetic weather data"""
-        dates = pd.date_range(start=self.start_date, periods=self.days, freq='D')
-        
-        # Base patterns
-        day_of_year = dates.dayofyear
-        
-        # Temperature with seasonal pattern
-        temperature = (
-            20 + 15 * np.sin(2 * np.pi * day_of_year / 365.25) +  # Seasonal
-            5 * np.sin(2 * np.pi * day_of_year / 7) +  # Weekly pattern
-            np.random.normal(0, 3, len(dates))  # Random noise
-        )
-        
-        # Humidity (inversely related to temperature with noise)
-        humidity = (
-            70 - 0.5 * (temperature - 20) + 
-            10 * np.sin(2 * np.pi * day_of_year / 365.25 + np.pi/2) +
-            np.random.normal(0, 5, len(dates))
-        )
-        humidity = np.clip(humidity, 20, 95)
-        
-        # Pressure with seasonal variation
-        pressure = (
-            1013 + 10 * np.sin(2 * np.pi * day_of_year / 365.25 + np.pi/4) +
-            np.random.normal(0, 5, len(dates))
-        )
-        
-        # Wind speed
-        wind_speed = (
-            10 + 5 * np.sin(2 * np.pi * day_of_year / 365.25) +
-            np.random.exponential(2, len(dates))
-        )
-        wind_speed = np.clip(wind_speed, 0, 30)
-        
-        # Precipitation (more complex pattern)
-        precipitation_prob = 0.3 + 0.2 * np.sin(2 * np.pi * day_of_year / 365.25 + np.pi)
-        precipitation = np.random.binomial(1, precipitation_prob) * np.random.exponential(5, len(dates))
-        
-        df = pd.DataFrame({
-            'date': dates,
-            'temperature': temperature,
-            'humidity': humidity,
-            'pressure': pressure,
-            'wind_speed': wind_speed,
-            'precipitation': precipitation
-        })
-        
-        return df
+# Генератор данных вынесен в отдельный модуль weather_data_generator.py
 
 class WeatherPredictor:
-    def __init__(self, sequence_length=30, hidden_size=64, num_layers=2, learning_rate=0.001):
+    def __init__(self, sequence_length=30, hidden_size=64, num_layers=2, learning_rate=0.001, dropout=0.2, data_type="realistic"):
         self.sequence_length = sequence_length
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.learning_rate = learning_rate
+        self.dropout = dropout
+        self.data_type = data_type
         self.scaler = MinMaxScaler()
         self.model = None
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.model_name = self._generate_model_name()
+    
+    def _generate_model_name(self):
+        """Generate automatic model name based on hyperparameters and data type"""
+        return f"weather_{self.data_type}_seq{self.sequence_length}_h{self.hidden_size}_l{self.num_layers}_lr{self.learning_rate}_drop{self.dropout}"
         
     def prepare_data(self, df, target_column='temperature'):
         """Prepare data for training"""
@@ -154,7 +107,8 @@ class WeatherPredictor:
             input_size=input_size,
             hidden_size=self.hidden_size,
             num_layers=self.num_layers,
-            output_size=1
+            output_size=1,
+            dropout=self.dropout
         ).to(self.device)
         
         criterion = nn.MSELoss()
@@ -203,8 +157,11 @@ class WeatherPredictor:
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 patience_counter = 0
-                # Save best model
-                torch.save(self.model.state_dict(), 'Predictions/saves/weather_model_best.pth')
+                # Save best model with automatic naming
+                model_dir = f'Predictions/models/{self.model_name}'
+                os.makedirs(model_dir, exist_ok=True)
+                best_model_path = f'{model_dir}/{self.model_name}_best.pth'
+                torch.save(self.model.state_dict(), best_model_path)
             else:
                 patience_counter += 1
             
@@ -216,7 +173,9 @@ class WeatherPredictor:
                 break
         
         # Load best model
-        self.model.load_state_dict(torch.load('Predictions/saves/weather_model_best.pth'))
+        model_dir = f'Predictions/models/{self.model_name}'
+        best_model_path = f'{model_dir}/{self.model_name}_best.pth'
+        self.model.load_state_dict(torch.load(best_model_path))
         
         return train_losses, val_losses
     
@@ -255,8 +214,17 @@ class WeatherPredictor:
             'actual': actual_denorm
         }
     
-    def save_model(self, model_path='Predictions/saves/weather_model.pth', scaler_path='Predictions/saves/weather_scaler.pkl'):
-        """Save trained model and scaler"""
+    def save_model(self, model_path=None, scaler_path=None):
+        """Save trained model and scaler with automatic naming in separate folders"""
+        # Create model-specific directory
+        model_dir = f'Predictions/models/{self.model_name}'
+        os.makedirs(model_dir, exist_ok=True)
+        
+        if model_path is None:
+            model_path = f'{model_dir}/{self.model_name}.pth'
+        if scaler_path is None:
+            scaler_path = f'{model_dir}/{self.model_name}_scaler.pkl'
+            
         torch.save(self.model.state_dict(), model_path)
         with open(scaler_path, 'wb') as f:
             pickle.dump(self.scaler, f)
@@ -306,18 +274,55 @@ def plot_results(train_losses, val_losses, evaluation_results):
     axes[1, 1].grid(True)
     
     plt.tight_layout()
-    plt.savefig('Predictions/saves/weather_training_results.png', dpi=300, bbox_inches='tight')
-    plt.show()
+    return fig  # Return figure for saving
+
+def select_data_type():
+    """Function to select data generation type"""
+    data_types = WeatherDataGenerator.get_available_data_types()
+    
+    print("\nДоступные типы данных для обучения:")
+    print("=" * 50)
+    for i, (data_type, description) in enumerate(data_types, 1):
+        print(f"{i}. {description}")
+    
+    while True:
+        try:
+            choice = input(f"\nВыберите тип данных (1-{len(data_types)}) или Enter для реалистичных: ").strip()
+            
+            if not choice:  # Default to realistic
+                return "realistic"
+            
+            choice_idx = int(choice) - 1
+            if 0 <= choice_idx < len(data_types):
+                selected_type = data_types[choice_idx][0]
+                print(f"Выбран тип данных: {data_types[choice_idx][1]}")
+                return selected_type
+            else:
+                print(f"Пожалуйста, введите число от 1 до {len(data_types)}")
+        except ValueError:
+            print("Пожалуйста, введите корректное число")
+
+def visualize_data_types():
+    """Visualize different data types for comparison"""
+    WeatherDataGenerator.visualize_data_types(days=365, save_path='Predictions/data_types_comparison.png')
 
 def main():
     """Main training function"""
     print("Weather Prediction Model Training")
     print("=" * 40)
     
+    # Option to visualize data types
+    show_viz = input("\nПоказать сравнение типов данных? (y/n): ").strip().lower()
+    if show_viz in ['y', 'yes', 'да']:
+        visualize_data_types()
+    
+    # Select data type
+    data_type = select_data_type()
+    
     # Generate synthetic weather data
-    print("Generating synthetic weather data...")
-    data_generator = WeatherDataGenerator(days=365*3)  # 3 years of data
-    weather_data = data_generator.generate_synthetic_data()
+    print(f"\nGenerating synthetic weather data ({data_type})...")
+    data_generator = WeatherDataGenerator.for_training(days=365*3, data_type=data_type)  # 3 years of data
+    weather_data = data_generator.generate_data()
     
     print(f"Generated {len(weather_data)} days of weather data")
     print("\nData preview:")
@@ -325,12 +330,15 @@ def main():
     print(f"\nData statistics:")
     print(weather_data.describe())
     
-    # Initialize predictor
+    # Initialize predictor with default configuration
+    # Для экспериментов можно менять эти параметры:
     predictor = WeatherPredictor(
-        sequence_length=30,  # Use 30 days to predict next day
-        hidden_size=64,
-        num_layers=2,
-        learning_rate=0.001
+        sequence_length=30,     # Длина последовательности (дни)
+        hidden_size=64,         # Размер скрытого слоя
+        num_layers=2,           # Количество LSTM слоев
+        learning_rate=0.001,    # Скорость обучения
+        dropout=0.2,            # Dropout для регуляризации
+        data_type=data_type     # Тип данных для именования модели
     )
     
     # Prepare data
@@ -359,13 +367,21 @@ def main():
     
     # Plot results
     print("\nGenerating plots...")
-    plot_results(train_losses, val_losses, evaluation_results)
+    model_dir = f'Predictions/models/{predictor.model_name}'
+    fig = plot_results(train_losses, val_losses, evaluation_results)
+    
+    # Save the plot to model directory
+    fig.savefig(f'{model_dir}/{predictor.model_name}_training_results.png', dpi=300, bbox_inches='tight')
+    plt.show()  # Show after saving
+    plt.close(fig)  # Close figure to free memory
     
     print("\nTraining completed successfully!")
     print("Files generated:")
-    print("- weather_model.pth (trained model)")
-    print("- weather_scaler.pkl (data scaler)")
-    print("- weather_training_results.png (training visualization)")
+    print(f"- {predictor.model_name}.pth (trained model)")
+    print(f"- {predictor.model_name}_best.pth (best model)")
+    print(f"- {predictor.model_name}_scaler.pkl (data scaler)")
+    print(f"- {predictor.model_name}_training_results.png (training visualization)")
+    print(f"\nAll files saved in: {model_dir}/")
 
 if __name__ == "__main__":
     main()

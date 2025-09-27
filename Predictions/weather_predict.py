@@ -8,6 +8,7 @@ import pickle
 import json
 from datetime import datetime, timedelta
 import os
+from weather_data_generator import WeatherDataGenerator
 
 class WeatherLSTM(nn.Module):
     """LSTM model for weather prediction - same architecture as training"""
@@ -35,15 +36,56 @@ class WeatherLSTM(nn.Module):
         return out
 
 class WeatherPredictor:
-    def __init__(self, model_path='Predictions/saves/weather_model.pth', scaler_path='Predictions/saves/weather_scaler.pkl'):
+    def __init__(self, model_name=None, model_path=None, scaler_path=None):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model = None
         self.scaler = None
-        self.sequence_length = 30  # Should match training
+        self.model_name = model_name
+        self.sequence_length = 30  # Will be updated from model name
         self.feature_names = ['temperature', 'humidity', 'pressure', 'wind_speed', 'precipitation']
+        
+        # If model_name is provided, construct paths automatically
+        if model_name:
+            model_dir = f'Predictions/models/{model_name}'
+            model_path = f'{model_dir}/{model_name}_best.pth'
+            scaler_path = f'{model_dir}/{model_name}_scaler.pkl'
+            # Parse model parameters from name
+            self._parse_model_parameters(model_name)
         
         # Load model and scaler
         self.load_model(model_path, scaler_path)
+    
+    def _parse_model_parameters(self, model_name):
+        """Parse model parameters from model name"""
+        try:
+            # Parse format: weather_seq30_h128_l2_lr0.001_drop0.3
+            parts = model_name.split('_')
+            
+            # Set defaults
+            self.sequence_length = 30
+            self.hidden_size = 64
+            self.num_layers = 2
+            self.dropout = 0.2
+            
+            for part in parts:
+                if part.startswith('seq') and len(part) > 3:
+                    self.sequence_length = int(part[3:])
+                elif part.startswith('h') and len(part) > 1 and part[1:].isdigit():
+                    self.hidden_size = int(part[1:])
+                elif part.startswith('l') and len(part) > 1 and part[1:].isdigit():
+                    self.num_layers = int(part[1:])
+                elif part.startswith('drop') and len(part) > 4:
+                    self.dropout = float(part[4:])
+            
+            print(f"Parsed parameters: seq={self.sequence_length}, hidden={self.hidden_size}, layers={self.num_layers}, dropout={self.dropout}")
+            
+        except (ValueError, IndexError) as e:
+            print(f"Warning: Could not parse parameters from model name '{model_name}': {e}")
+            print("Using defaults: seq=30, hidden=64, layers=2, dropout=0.2")
+            self.sequence_length = 30
+            self.hidden_size = 64
+            self.num_layers = 2
+            self.dropout = 0.2
     
     def load_model(self, model_path, scaler_path):
         """Load trained model and scaler"""
@@ -56,13 +98,14 @@ class WeatherPredictor:
         with open(scaler_path, 'rb') as f:
             self.scaler = pickle.load(f)
         
-        # Initialize model with correct architecture
+        # Initialize model with correct architecture from parsed parameters
         input_size = len(self.feature_names)  # Number of features
         self.model = WeatherLSTM(
             input_size=input_size,
-            hidden_size=64,  # Should match training
-            num_layers=2,    # Should match training
-            output_size=1
+            hidden_size=getattr(self, 'hidden_size', 64),
+            num_layers=getattr(self, 'num_layers', 2),
+            output_size=1,
+            dropout=getattr(self, 'dropout', 0.2)
         ).to(self.device)
         
         # Load model weights
@@ -162,58 +205,126 @@ class WeatherPredictor:
             'std': std_predictions
         }
 
-class WeatherDataSimulator:
-    """Simulate current weather conditions for demonstration"""
-    
-    @staticmethod
-    def generate_current_conditions(days=30):
-        """Generate current weather conditions for the last 30 days"""
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=days-1)
-        
-        dates = pd.date_range(start=start_date, end=end_date, freq='D')
-        day_of_year = dates.dayofyear
-        
-        # Generate realistic weather data
-        temperature = (
-            20 + 15 * np.sin(2 * np.pi * day_of_year / 365.25) +
-            5 * np.sin(2 * np.pi * day_of_year / 7) +
-            np.random.normal(0, 2, len(dates))
-        )
-        
-        humidity = (
-            70 - 0.5 * (temperature - 20) + 
-            10 * np.sin(2 * np.pi * day_of_year / 365.25 + np.pi/2) +
-            np.random.normal(0, 3, len(dates))
-        )
-        humidity = np.clip(humidity, 20, 95)
-        
-        pressure = (
-            1013 + 10 * np.sin(2 * np.pi * day_of_year / 365.25 + np.pi/4) +
-            np.random.normal(0, 3, len(dates))
-        )
-        
-        wind_speed = (
-            10 + 5 * np.sin(2 * np.pi * day_of_year / 365.25) +
-            np.random.exponential(1.5, len(dates))
-        )
-        wind_speed = np.clip(wind_speed, 0, 25)
-        
-        precipitation_prob = 0.3 + 0.2 * np.sin(2 * np.pi * day_of_year / 365.25 + np.pi)
-        precipitation = np.random.binomial(1, precipitation_prob) * np.random.exponential(3, len(dates))
-        
-        df = pd.DataFrame({
-            'date': dates,
-            'temperature': temperature,
-            'humidity': humidity,
-            'pressure': pressure,
-            'wind_speed': wind_speed,
-            'precipitation': precipitation
-        })
-        
-        return df
+# Генератор данных вынесен в отдельный модуль weather_data_generator.py
 
-def plot_predictions(historical_data, predictions_result, days_ahead):
+def find_available_models():
+    """Find all available trained models"""
+    models_dir = 'Predictions/models'
+    available_models = []
+    
+    if not os.path.exists(models_dir):
+        return available_models
+    
+    for model_folder in os.listdir(models_dir):
+        model_path = os.path.join(models_dir, model_folder)
+        if os.path.isdir(model_path):
+            # Check if required files exist
+            model_file = os.path.join(model_path, f'{model_folder}_best.pth')
+            scaler_file = os.path.join(model_path, f'{model_folder}_scaler.pkl')
+            
+            if os.path.exists(model_file) and os.path.exists(scaler_file):
+                available_models.append(model_folder)
+    
+    return sorted(available_models)
+
+def select_model():
+    """Interactive model selection"""
+    available_models = find_available_models()
+    
+    if not available_models:
+        print("No trained models found. Please run weather_train.py first.")
+        return None
+    
+    print("Available trained models:")
+    print("=" * 40)
+    
+    for i, model_name in enumerate(available_models, 1):
+        # Parse and display model parameters
+        try:
+            parts = model_name.split('_')
+            seq_len = 'N/A'
+            hidden = 'N/A'
+            layers = 'N/A'
+            lr = 'N/A'
+            dropout = 'N/A'
+            
+            for part in parts:
+                if part.startswith('seq') and len(part) > 3:
+                    seq_len = int(part[3:])
+                elif part.startswith('h') and len(part) > 1 and part[1:].isdigit():
+                    hidden = int(part[1:])
+                elif part.startswith('l') and len(part) > 1 and part[1:].isdigit():
+                    layers = int(part[1:])
+                elif part.startswith('lr') and len(part) > 2:
+                    lr = part[2:]
+                elif part.startswith('drop') and len(part) > 4:
+                    dropout = part[4:]
+            
+            print(f"{i}. {model_name}")
+            print(f"   Sequence: {seq_len} days, Hidden: {hidden}, Layers: {layers}")
+            print(f"   Learning Rate: {lr}, Dropout: {dropout}")
+            print()
+        except Exception as e:
+            print(f"{i}. {model_name}")
+            print(f"   (Parameters could not be parsed: {e})")
+            print()
+    
+    while True:
+        try:
+            choice = input(f"Select model (1-{len(available_models)}) or press Enter for the first one: ").strip()
+            
+            if not choice:  # Default to first model
+                return available_models[0]
+            
+            choice_idx = int(choice) - 1
+            if 0 <= choice_idx < len(available_models):
+                return available_models[choice_idx]
+            else:
+                print(f"Please enter a number between 1 and {len(available_models)}")
+        except ValueError:
+            print("Please enter a valid number")
+
+def extract_data_type_from_model_name(model_name):
+    """Extract data type from model name"""
+    data_types = ["realistic", "linear_trend", "random_walk", "step_changes", "noisy", "polynomial"]
+    
+    for data_type in data_types:
+        if data_type in model_name:
+            return data_type
+    
+    return "realistic"  # Default fallback
+
+def select_prediction_data_type(model_data_type):
+    """Select data type for prediction input"""
+    data_types = [("same", f"Тот же тип что и модель ({model_data_type})")] + WeatherDataGenerator.get_available_data_types()
+    
+    print(f"\nМодель была обучена на данных типа: {model_data_type}")
+    print("Выберите тип данных для предсказания:")
+    print("=" * 50)
+    
+    for i, (data_type, description) in enumerate(data_types, 1):
+        print(f"{i}. {description}")
+    
+    while True:
+        try:
+            choice = input(f"\nВыберите тип данных (1-{len(data_types)}) или Enter для того же типа: ").strip()
+            
+            if not choice:  # Default to same as model
+                return model_data_type
+            
+            choice_idx = int(choice) - 1
+            if 0 <= choice_idx < len(data_types):
+                selected_type = data_types[choice_idx][0]
+                if selected_type == "same":
+                    return model_data_type
+                else:
+                    return selected_type
+            else:
+                print(f"Пожалуйста, введите число от 1 до {len(data_types)}")
+        except ValueError:
+            print("Пожалуйста, введите корректное число")
+
+def plot_predictions(historical_data, predictions_result, days_ahead, model_name):
     """Plot historical data and predictions"""
     fig, axes = plt.subplots(2, 1, figsize=(12, 8))
     
@@ -250,7 +361,12 @@ def plot_predictions(historical_data, predictions_result, days_ahead):
     axes[1].grid(True, alpha=0.3)
     
     plt.tight_layout()
-    plt.savefig('Predictions/saves/weather_predictions.png', dpi=300, bbox_inches='tight')
+    
+    # Save to model-specific results directory
+    results_dir = f'Predictions/results/{model_name}'
+    os.makedirs(results_dir, exist_ok=True)
+    
+    plt.savefig(f'{results_dir}/{model_name}_predictions.png', dpi=300, bbox_inches='tight')
     plt.show()
 
 def main():
@@ -259,13 +375,25 @@ def main():
     print("=" * 30)
     
     try:
-        # Initialize predictor
-        print("Loading trained model...")
-        predictor = WeatherPredictor()
+        # Select model
+        selected_model = select_model()
+        if not selected_model:
+            return
+        
+        # Initialize predictor with selected model
+        print(f"\nLoading model: {selected_model}")
+        predictor = WeatherPredictor(model_name=selected_model)
+        
+        # Extract data type from model name
+        model_data_type = extract_data_type_from_model_name(selected_model)
+        
+        # Select data type for prediction
+        prediction_data_type = select_prediction_data_type(model_data_type)
         
         # Simulate current weather conditions (in real use, this would be actual data)
-        print("Loading weather data...")
-        weather_data = WeatherDataSimulator.generate_current_conditions(days=35)
+        print(f"\nGenerating weather data ({prediction_data_type})...")
+        data_generator = WeatherDataGenerator.for_prediction(days=35, data_type=prediction_data_type)
+        weather_data = data_generator.generate_data()
         
         print("Current weather data preview:")
         print(weather_data.tail().to_string(index=False))
@@ -304,11 +432,24 @@ def main():
         
         # Create visualization
         print(f"\nGenerating prediction plots...")
-        plot_predictions(weather_data, confidence_predictions, days_to_predict)
+        plot_predictions(weather_data, confidence_predictions, days_to_predict, selected_model)
+        
+        # Create results directory
+        results_dir = f'Predictions/results/{selected_model}'
+        os.makedirs(results_dir, exist_ok=True)
         
         # Save predictions to file
         results = {
+            'model_name': selected_model,
+            'model_data_type': model_data_type,
+            'prediction_data_type': prediction_data_type,
             'prediction_date': datetime.now().isoformat(),
+            'model_parameters': {
+                'sequence_length': predictor.sequence_length,
+                'hidden_size': getattr(predictor, 'hidden_size', 64),
+                'num_layers': getattr(predictor, 'num_layers', 2),
+                'dropout': getattr(predictor, 'dropout', 0.2)
+            },
             'predictions': {
                 str(date): {
                     'temperature': float(pred),
@@ -326,13 +467,17 @@ def main():
             }
         }
         
-        with open('Predictions/saves/weather_predictions.json', 'w') as f:
+        results_file = f'{results_dir}/{selected_model}_predictions.json'
+        with open(results_file, 'w') as f:
             json.dump(results, f, indent=2)
         
         print(f"\nPrediction completed successfully!")
         print("Files generated:")
-        print("- weather_predictions.png (visualization)")
-        print("- weather_predictions.json (detailed results)")
+        print(f"- {results_dir}/{selected_model}_predictions.png (visualization)")
+        print(f"- {results_file} (detailed results)")
+        print(f"\nModel used: {selected_model}")
+        print(f"Model trained on: {model_data_type} data")
+        print(f"Prediction made on: {prediction_data_type} data")
         
     except FileNotFoundError as e:
         print(f"Error: {e}")
