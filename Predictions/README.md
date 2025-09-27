@@ -1,196 +1,275 @@
-# Weather Prediction Neural Network
+# Нейронная сеть для прогнозирования погоды
 
-A time sequence LSTM neural network for weather prediction using PyTorch.
+Нейронная сеть на основе LSTM для прогнозирования погоды с использованием PyTorch и различных типов данных.
 
-## Overview
+## Обзор
 
-This project implements a Long Short-Term Memory (LSTM) neural network that predicts temperature based on historical weather patterns. The system consists of two main components:
+Этот проект реализует нейронную сеть с долгой краткосрочной памятью (LSTM), которая предсказывает температуру на основе исторических данных о погоде. Система состоит из трех основных компонентов:
 
-1. **Training Module** (`weather_train.py`): Trains the LSTM model on synthetic weather data
-2. **Prediction Module** (`weather_predict.py`): Uses the trained model to make weather predictions
+1. **Модуль обучения** (`weather_train.py`): Обучает модель LSTM на синтетических данных
+2. **Модуль предсказания** (`weather_predict.py`): Использует обученную модель для прогнозов
+3. **Генератор данных** (`weather_data_generator.py`): Создает различные типы синтетических данных
 
-## Features
+## Основные функции
 
-- **LSTM Architecture**: Multi-layer LSTM with dropout for regularization
-- **Multi-variate Input**: Uses temperature, humidity, pressure, wind speed, and precipitation
-- **Sequence Learning**: Uses 30 days of historical data to predict next day's temperature
-- **Uncertainty Estimation**: Provides confidence intervals using Monte Carlo dropout
-- **Synthetic Data Generation**: Creates realistic weather patterns for training
-- **Visualization**: Comprehensive plotting of training results and predictions
-- **Early Stopping**: Prevents overfitting with patience-based early stopping
-- **Model Persistence**: Save and load trained models
+- **Архитектура LSTM**: Многослойная LSTM с dropout для регуляризации
+- **6 типов данных**: Realistic, Linear Trend, Random Walk, Step Changes, Noisy, Polynomial
+- **Автоматическое именование моделей**: По гиперпараметрам и типу данных
+- **Интерактивный выбор**: Типа данных для обучения и предсказания
+- **Cross-domain тестирование**: Обучение на одном типе, тестирование на другом
+- **Структурированное хранение**: Отдельные папки для каждой модели
+- **Многомерный вход**: Температура, влажность, давление, скорость ветра, осадки
+- **Оценка неопределенности**: Доверительные интервалы через Monte Carlo dropout
+- **Визуализация**: Сравнение типов данных и результатов обучения
+- **Ранняя остановка**: Предотвращение переобучения
 
-## Installation
+## Установка
 
-1. Install Python 3.7 or later
-2. Install required packages:
+1. Установите Python 3.7 или новее
+2. Установите необходимые пакеты:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Or install manually:
+Или установите вручную:
 ```bash
 pip install torch numpy pandas scikit-learn matplotlib requests
 ```
 
-## Usage
+## Использование
 
-### Training the Model
+### Обучение модели
 
-Run the training script to create and train the LSTM model:
+Запустите скрипт обучения для создания и тренировки модели LSTM:
 
 ```bash
 python weather_train.py
 ```
 
-This will:
-- Generate 3 years of synthetic weather data
-- Train an LSTM model to predict temperature
-- Save the trained model and data scaler
-- Generate training visualization plots
-- Display training progress and evaluation metrics
+Процесс обучения:
+1. **Выбор типа данных**: Выберите из 6 доступных типов синтетических данных
+2. **Опциональная визуализация**: Просмотр сравнения всех типов данных
+3. **Генерация данных**: Создание 3 лет синтетических данных
+4. **Обучение модели**: Тренировка LSTM с early stopping
+5. **Сохранение результатов**: Автоматическое именование и структурированное хранение
 
-Output files:
-- `weather_model.pth`: Trained PyTorch model
-- `weather_model_best.pth`: Best model checkpoint
-- `weather_scaler.pkl`: Data preprocessing scaler
-- `weather_training_results.png`: Training visualization
+Файлы в `Predictions/models/{model_name}/`:
+- `{model_name}.pth`: Обученная модель PyTorch
+- `{model_name}_best.pth`: Лучший checkpoint модели  
+- `{model_name}_scaler.pkl`: Скейлер для предобработки
+- `{model_name}_training_results.png`: Визуализация обучения
 
-### Making Predictions
+### Создание прогнозов
 
-After training, use the prediction script:
+После обучения используйте скрипт предсказания:
 
 ```bash
 python weather_predict.py
 ```
 
-This will:
-- Load the trained model and scaler
-- Generate current weather conditions (simulated)
-- Predict temperature for the next 7 days
-- Provide confidence intervals
-- Generate prediction visualizations
-- Save results to JSON file
+Процесс предсказания:
+1. **Выбор модели**: Интерактивный выбор из доступных обученных моделей
+2. **Выбор типа данных**: Тот же тип что и модель или другой для кросс-тестирования
+3. **Генерация входных данных**: 35 дней синтетических данных
+4. **Прогнозирование**: 7 дней с доверительными интервалами
+5. **Сохранение результатов**: В папку модели
 
-Output files:
-- `weather_predictions.png`: Prediction visualization
-- `weather_predictions.json`: Detailed prediction results
+Файлы в `Predictions/results/{model_name}/`:
+- `{model_name}_predictions.png`: Визуализация прогнозов
+- `{model_name}_predictions.json`: Детальные результаты
 
-## Model Architecture
+## Типы данных для тестирования
 
-The LSTM neural network consists of:
+Система поддерживает 6 различных типов синтетических данных:
 
-- **Input Layer**: 5 features (temperature, humidity, pressure, wind speed, precipitation)
-- **LSTM Layers**: 2 layers with 64 hidden units each
-- **Dropout**: 20% dropout rate for regularization
-- **Output Layer**: Single neuron for temperature prediction
-- **Sequence Length**: 30 days of historical data
+### 1. **Realistic** - Реалистичные данные
+- Сезонные паттерны (синусоидальные)
+- Недельные циклы
+- Естественный шум
 
-## Data Features
+### 2. **Linear Trend** - Линейные тренды
+- Постоянные линейные изменения
+- Подходит для тестирования способности модели к экстраполяции
 
-The model uses the following weather parameters:
+### 3. **Random Walk** - Случайное блуждание
+- Непредсказуемые изменения
+- Тест на устойчивость к шуму
 
-1. **Temperature** (°C): Target variable for prediction
-2. **Humidity** (%): Relative humidity
-3. **Pressure** (hPa): Atmospheric pressure
-4. **Wind Speed** (m/s): Wind velocity
-5. **Precipitation** (mm): Daily rainfall
+### 4. **Step Changes** - Ступенчатые изменения  
+- Резкие скачки в данных
+- Проверка адаптации к внезапным изменениям
 
-## Prediction Capabilities
+### 5. **Noisy** - Шумные данные
+- Высокий уровень случайного шума
+- Минимальные закономерности
 
-- **Single-step Prediction**: Predict next day's temperature
-- **Multi-step Prediction**: Predict multiple days ahead
-- **Uncertainty Quantification**: 95% confidence intervals
-- **Trend Analysis**: Capture seasonal and weekly patterns
+### 6. **Polynomial** - Полиномиальные тренды
+- Сложные нелинейные зависимости
+- Тест на способность к нелинейному моделированию
 
-## Performance Metrics
+## Архитектура модели
 
-The model is evaluated using:
-- **MSE**: Mean Squared Error
-- **MAE**: Mean Absolute Error  
-- **RMSE**: Root Mean Squared Error
+Нейронная сеть LSTM состоит из:
+- **Входной слой**: 5 признаков (температура, влажность, давление, скорость ветра, осадки)
+- **LSTM слои**: Настраиваемое количество слоев и размер
+- **Dropout**: Настраиваемый процент для регуляризации  
+- **Выходной слой**: Один нейрон для предсказания температуры
+- **Длина последовательности**: Настраиваемая (по умолчанию 30 дней)
 
-## Customization
+## Возможности системы
 
-### Training Parameters
+### Cross-Domain тестирование
+- Обучение на **realistic** данных, тестирование на **noisy**
+- Обучение на **linear_trend**, тестирование на **step_changes**
+- Исследование робастности модели
 
-Modify in `weather_train.py`:
+### Автоматическое именование
+Модели именуются по формату: `weather_{data_type}_seq{length}_h{hidden}_l{layers}_lr{rate}_drop{dropout}`
+
+Пример: `weather_realistic_seq30_h64_l2_lr0.001_drop0.2`
+
+### Структурированное хранение
+```
+Predictions/
+├── models/{model_name}/          # Обученные модели
+│   ├── {model_name}.pth
+│   ├── {model_name}_best.pth
+│   ├── {model_name}_scaler.pkl
+│   └── {model_name}_training_results.png
+└── results/{model_name}/         # Результаты предсказаний
+    ├── {model_name}_predictions.png
+    └── {model_name}_predictions.json
+```
+
+## Метрики оценки
+
+Модель оценивается с использованием:
+- **MSE**: Средняя квадратичная ошибка
+- **MAE**: Средняя абсолютная ошибка
+- **RMSE**: Корень из средней квадратичной ошибки
+
+## Настройка параметров
+
+### Параметры обучения
+
+Изменяйте в `weather_train.py`:
 ```python
 predictor = WeatherPredictor(
-    sequence_length=30,    # Days of history to use
-    hidden_size=64,        # LSTM hidden units
-    num_layers=2,          # Number of LSTM layers
-    learning_rate=0.001    # Learning rate
+    sequence_length=30,     # Количество дней истории
+    hidden_size=64,         # Размер скрытого слоя LSTM
+    num_layers=2,           # Количество LSTM слоев
+    learning_rate=0.001,    # Скорость обучения
+    dropout=0.2,            # Процент dropout
+    data_type="realistic"   # Тип данных для именования
 )
 ```
 
-### Data Generation
+### Генерация данных
 
-Adjust synthetic data in `WeatherDataGenerator`:
+Настройка в `weather_data_generator.py`:
 ```python
-data_generator = WeatherDataGenerator(days=365*3)  # Training data duration
+# Для обучения
+generator = WeatherDataGenerator.for_training(days=365*3, data_type="realistic")
+
+# Для предсказания  
+generator = WeatherDataGenerator.for_prediction(days=35, data_type="realistic")
 ```
 
-### Prediction Horizon
+### Горизонт предсказания
 
-Change prediction period in `weather_predict.py`:
+Изменение в `weather_predict.py`:
 ```python
-days_to_predict = 7  # Number of days to predict
+days_to_predict = 7  # Количество дней для предсказания
 ```
 
-## Model Files
+## Примеры экспериментов
 
-After training, the following files are created:
+### Same-Domain тестирование
+```python
+# Обучение и тестирование на одном типе данных
+python weather_train.py  # Выберите "realistic"
+python weather_predict.py  # Выберите ту же модель и "same" тип данных
+```
 
-- `weather_model.pth`: Complete trained model
-- `weather_scaler.pkl`: Data normalization scaler (required for predictions)
+### Cross-Domain тестирование
+```python 
+# Обучение на одном типе, тестирование на другом
+python weather_train.py  # Выберите "realistic" 
+python weather_predict.py  # Выберите модель, затем "noisy" для входных данных
+```
 
-## Real Data Integration
+### Сравнение архитектур
+```python
+# Обучите несколько моделей с разными параметрами:
+# weather_realistic_seq30_h64_l2_lr0.001_drop0.2
+# weather_realistic_seq30_h128_l3_lr0.0005_drop0.3
+# weather_realistic_seq45_h64_l2_lr0.001_drop0.2
+```
 
-To use real weather data instead of synthetic data:
+## Интеграция с реальными данными
 
-1. Replace `WeatherDataGenerator` with actual weather API calls
-2. Ensure data format matches: columns = ['date', 'temperature', 'humidity', 'pressure', 'wind_speed', 'precipitation']
-3. Maintain consistent units and data quality
+Для использования реальных данных о погоде:
 
-Example weather APIs:
+1. Замените `WeatherDataGenerator` на API-вызовы
+2. Убедитесь в соответствии формата: `['date', 'temperature', 'humidity', 'pressure', 'wind_speed', 'precipitation']`
+3. Поддерживайте согласованность единиц измерения
+
+Примеры API:
 - OpenWeatherMap
-- WeatherAPI
-- National Weather Service
+- WeatherAPI  
+- Росгидромет API
 
-## Troubleshooting
+## Устранение неполадок
 
-### Common Issues
+### Частые проблемы
 
-1. **Import Errors**: Ensure all packages are installed via `pip install -r requirements.txt`
-2. **CUDA Errors**: Model automatically detects GPU; works on CPU if CUDA unavailable
-3. **Memory Issues**: Reduce batch_size in training parameters
-4. **Poor Predictions**: Try longer training (more epochs) or more training data
+1. **Ошибки импорта**: Установите пакеты через `pip install -r requirements.txt`
+2. **CUDA ошибки**: Модель автоматически определяет GPU; работает на CPU если CUDA недоступна
+3. **Проблемы с памятью**: Уменьшите batch_size в параметрах обучения
+4. **Плохие предсказания**: Попробуйте более длительное обучение или больше данных
+5. **Ошибки парсинга модели**: Проверьте имя модели на соответствие формату
 
-### File Not Found Errors
+### Ошибки "Файл не найден"
 
-Make sure to run `weather_train.py` before `weather_predict.py` to generate the required model files.
+Убедитесь, что запустили `weather_train.py` перед `weather_predict.py` для создания необходимых файлов модели.
 
-## Future Enhancements
+## Будущие улучшения
 
-Potential improvements:
-- Integration with real weather APIs
-- Multi-location prediction
-- Additional weather variables (UV index, visibility, etc.)
-- Ensemble methods for improved accuracy
-- Web interface for easy interaction
-- Real-time prediction updates
+Потенциальные доработки:
+- Интеграция с реальными API погоды
+- Многолокационное предсказание  
+- Дополнительные метеорологические переменные
+- Ансамблевые методы для повышения точности
+- Веб-интерфейс для удобного взаимодействия
+- Обновления прогнозов в реальном времени
+- Поддержка других архитектур (Transformer, GRU)
 
-## Dependencies
+## Зависимости
 
-- **PyTorch**: Neural network framework
-- **NumPy**: Numerical computations
-- **Pandas**: Data manipulation
-- **Scikit-learn**: Data preprocessing and metrics
-- **Matplotlib**: Visualization
-- **Requests**: HTTP requests (for future API integration)
+- **PyTorch**: Фреймворк нейронных сетей
+- **NumPy**: Численные вычисления
+- **Pandas**: Обработка данных
+- **Scikit-learn**: Предобработка данных и метрики
+- **Matplotlib**: Визуализация
+- **Requests**: HTTP-запросы (для будущей интеграции с API)
 
-## License
+## Структура проекта
 
-This project is open-source and available under the MIT License.
+```
+Predictions/
+├── weather_train.py              # Модуль обучения
+├── weather_predict.py            # Модуль предсказания  
+├── weather_data_generator.py     # Генератор данных
+├── requirements.txt              # Зависимости
+├── README.md                     # Документация
+├── models/                       # Обученные модели
+│   └── {model_name}/
+├── results/                      # Результаты предсказаний
+│   └── {model_name}/
+└── data_types_comparison.png     # Сравнение типов данных
+```
+
+## Лицензия
+
+Этот проект имеет открытый исходный код и доступен под лицензией MIT.
